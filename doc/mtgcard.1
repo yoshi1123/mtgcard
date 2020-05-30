@@ -1,0 +1,248 @@
+.\" -*- nroff -*-
+.TH MTGCARD 1 "May 2020" "mtgcard man page"
+
+.SH NAME
+mtgcard \- command-line MTG card viewer and searcher
+
+.\" ====================================================================
+.SH SYNOPSIS
+.\" ====================================================================
+.
+.SY mtgcard
+.OP \-gcRv
+.OP \-\-set SETCODE
+.OP \-\-format FORMAT
+.I name
+.YS
+.
+.SY mtgcard
+.OP \-l
+.OP \-qgrv
+.OP \-\-sort KEY
+.OP \-L LIMIT
+.I query
+.YS
+.
+.SY mtgcard
+.RB [ \-n
+|
+.BR \-N ]
+.OP \-qgrv
+.OP \-\-sort KEY
+.OP \-L LIMIT
+.I query
+.YS
+.
+.SY mtgcard
+.OP \-i NR_COLUMNS
+.OP cgrv
+.OP \-\-sort KEY
+.OP \-L LIMIT
+.I query
+.YS
+.
+.SY mtgcard
+.OP \-v
+.B \-\-update-db
+
+.\" ====================================================================
+.SH DESCRIPTION
+.\" ====================================================================
+.
+.B mtgcard
+Command-line MTG card viewer and searcher.
+
+.\" ====================================================================
+.SH OPTIONS
+.\" ====================================================================
+.
+.HP
+.B \-h
+.TQ
+.B \-\-help
+Show this help message and exit.
+.
+.TP
+.B \-l
+List card summaries by query.
+.
+.TP
+.B \-iN
+List card images by query.
+.
+.TP
+.B \-n
+List card names by query.
+.
+.TP
+.B \-N
+List card names, of all sides, by query.
+.
+.TP
+.B \-g
+Disable color.
+.
+.TP
+.B \-q
+Disable header row in listing.
+.
+.TP
+.B \-c
+Compact mode. Hide card image in card prints.
+.
+.TP
+.BI --sort\  KEY
+Specify sort key. KEY is one of 'name', 'cmc', or 'price'.
+.
+.TP
+.B \-r
+Reverse sort order.
+.
+.TP
+.BI \-L\  LIMIT
+Set a listing limit.
+.
+.TP
+.B \-v
+For non-listings: show extra info such as price, printings, and legalities.
+\&
+For listings: show matches count.
+\&
+For update: show update process.
+.
+.TP
+.B \-\-update-db
+Update the local MTG database.
+
+.
+.\" ====================================================================
+.SH SEARCH SYNTAX
+.\" ====================================================================
+.
+\&
+.SS
+Query syntax
+\&
+.IP
+condition [[or] condition ...]
+.P
+A space separating condition symbols implies "AND". An "AND" has higher
+presedence than "OR".
+For example,
+.IP
+mana=g cmc=1 or mana=r cmc=2
+.P
+means (1) '1 green mana AND 1 converted mana cost' OR (2) '1 red mana AND 1
+converted mana cost'.      
+.
+.SS
+Condition syntax
+\&
+.IP
+<keyword><op><value>
+.P
+keyword list:
+.IP
+    c[olors]
+    cmc
+    f[ormat], legal
+    layout
+    loyalty
+    mana
+    name
+    power
+    price
+    rarity
+    set
+    t[ype]
+    text
+    toughness
+    year
+.
+.P
+op list:
+.IP
+:, =, !=, <, >, <=, >=
+.
+.\" ====================================================================
+.SH EXAMPLES
+.\" ====================================================================
+.
+\&
+.P
+List either (1) artifact cards legal in vintage or (2) any card legal in
+commander:
+.IP
+.EX
+mtgcard -l format:vintage type:artifact or f:commander
+.EE
+.
+.P
+List images of cards in rows of four with colors red, black, or colorless, and
+with converted manacost 3:
+.IP
+.EX
+mtgcard -i4 mana<=rb cmc=3
+.EE
+.
+.P
+List names of cards with colors red, black, or colorless, or with converted
+manacost 3:
+.IP
+.EX
+mtgcard -n mana<=rb or cmc=3
+.EE
+
+
+.\" ====================================================================
+.SH MANA SYMBOLS                                                     
+.\" ====================================================================
+.
+
+.P
+basic mana symbols:
+.IP
+    {W}, {U}, {B}, {R}, {G}, {C}
+.P
+the numerical symbols:
+.IP
+    {0}, {1}, {2}, {3}, {4}, ...
+.P
+the variable symbol:
+.IP
+    {X}
+.P
+the hybrid symbols:
+.IP
+    {W/U}, {W/B}, {U/B}, {U/R}, {B/R}, {B/G}, {R/G}, {R/W}, {G/W}, {G/U}
+.P
+the monocolored hybrid symbols:
+.IP
+    {2/W}, {2/U}, {2/B}, {2/R}, {2/G}
+.P
+the Phyrexian mana symbols:
+.IP
+    {W/P}, {U/P}, {B/P}, {R/P}, {G/P}
+.P
+the snow symbol:
+.IP
+    {S}
+\&
+.TP
+Note:
+Any symbol without a '/' can be used without braces (e.g., 'w' is the same
+as '{W}').
+
+.\" ====================================================================
+.SH AUTHOR
+.\" ====================================================================
+.
+<yoshi1@tutanota.com>
+.SH BUGS
+Submit bugs to https://github.com/yoshi1123/mtgcard/issues
+.
+.SH AVAILABILITY
+.B mtgcard
+is available from https://github.com/yoshi1123/mtgcard
+.\" .SH SEE ALSO
+.\" .BR chattr (1)

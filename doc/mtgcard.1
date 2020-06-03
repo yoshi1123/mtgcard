@@ -9,7 +9,7 @@ mtgcard \- command-line MTG card viewer and searcher
 .\" ====================================================================
 .
 .SY mtgcard
-.OP \-gcRv
+.OP \-gGcRv
 .OP \-\-set SETCODE
 .OP \-\-format FORMAT
 .I name
@@ -17,7 +17,7 @@ mtgcard \- command-line MTG card viewer and searcher
 .
 .SY mtgcard
 .OP \-l
-.OP \-qgrv
+.OP \-qgGrv
 .OP \-\-sort KEY
 .OP \-L LIMIT
 .I query
@@ -27,7 +27,7 @@ mtgcard \- command-line MTG card viewer and searcher
 .RB [ \-n
 |
 .BR \-N ]
-.OP \-qgrv
+.OP \-qgGrv
 .OP \-\-sort KEY
 .OP \-L LIMIT
 .I query
@@ -35,7 +35,7 @@ mtgcard \- command-line MTG card viewer and searcher
 .
 .SY mtgcard
 .OP \-i NR_COLUMNS
-.OP cgrv
+.OP cgGrv
 .OP \-\-sort KEY
 .OP \-L LIMIT
 .I query
@@ -81,6 +81,10 @@ List card names, of all sides, by query.
 .TP
 .B \-g
 Disable color.
+.
+.TP
+.B \-G
+Enable color (default).
 .
 .TP
 .B \-q

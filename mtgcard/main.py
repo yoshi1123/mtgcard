@@ -68,6 +68,12 @@ def get_args():
         default=settings.ANSI_COLOR,
         help="disable color",
     )
+    parser.add_argument(
+        "-G",
+        dest="ansi",
+        action="store_const",
+        const=True,
+        help="enable color (default)",
     )
     parser.add_argument(
         "-q",

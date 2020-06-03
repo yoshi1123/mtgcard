@@ -1,7 +1,7 @@
 # mtgcard
 
-mtgcard is an offline command-line MTG card viewer and searcher written in
-python. A sqlite database is generated from a JSON database from
+mtgcard is an offline cross-platform command-line MTG card viewer and searcher
+written in python. A sqlite database is generated from a JSON database from
 https://mtgjson.com/. One can update/obtain the database with `mtgcard
 --update-db`. The data is updated weekly at 4PM EST, typically on Sundays, and
 prices are updated daily at around 4PM EST. The download is ~45MB.
@@ -20,7 +20,7 @@ prices are updated daily at around 4PM EST. The download is ~45MB.
 - all card layouts (e.g., adventure, split, meld) are supported
 
 
-## Installation
+## Installation (Win, OSX, Linux, and other platforms)
 
     git clone https://github.com/yoshi1123/mtgcard.git /path/to/src
     cd /path/to/src

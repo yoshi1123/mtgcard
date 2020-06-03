@@ -61,7 +61,13 @@ def get_args():
         help="list card names, of all sides, by 'query'",
     )
     parser.add_argument(
-        "-g", dest="ansi", action="store_false", help="disable color"
+        "-g",
+        dest="ansi",
+        action="store_const",
+        const=False,
+        default=settings.ANSI_COLOR,
+        help="disable color",
+    )
     )
     parser.add_argument(
         "-q",

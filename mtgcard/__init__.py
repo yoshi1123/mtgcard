@@ -25,6 +25,7 @@ def get_defaults():
         global settings
 
         class settings:
+            ANSI_COLOR = True
             DEFAULT_FORMAT = ""
             CURRENCY = "USD"
             US_TO_CUR_RATE = 1
@@ -39,6 +40,8 @@ def get_defaults():
                 "vintage",
             ]
 
+    if "ANSI_COLOR" not in dir(settings):
+        settings.ANSI_COLOR = True
     if "DEFAULT_FORMAT" not in dir(settings):
         settings.DEFAULT_FORMAT = None
     if "CURRENCY" not in dir(settings):

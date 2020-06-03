@@ -168,6 +168,9 @@ Exchange rate from USD:
 
     US_TO_CUR_RATE = 1
 
+Option to turn off ansi color (so one does not need to use `-g`):
+
+    ANSI_COLOR = True
 
 # Notes
 

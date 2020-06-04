@@ -9,6 +9,22 @@ prices are updated daily at around 4PM EST. The download is ~45MB.
 
 # Images
 
+**Basic display by name**:
+
+<img src="./doc/screenshots/image_timewalk.png" width="562" />
+
+**Verbose display by name**:
+
+<img src="./doc/screenshots/verbose_lightning.png" width="562" />
+
+**Detailed list search -- cards in set IKO with either (1) red instant cards
+with converted mana cost >=3 OR (2) green cards with converted mana cost <3**:
+
+<img src="./doc/screenshots/list_detailed.png" width="722" />
+
+**Image list search limited to a maximum of 8 results -- elf or bird creatures, that either have mutate in the text or are adventure cards**:
+
+<img src="./doc/screenshots/list_images.png" width="1354" />
 
 ## Features
 

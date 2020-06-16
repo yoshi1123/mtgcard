@@ -48,6 +48,17 @@ def get_defaults():
         settings.CURRENCY = "USD"
     if "US_TO_CUR_RATE" not in dir(settings):
         settings.US_TO_CUR_RATE = 1
+    if "SHOWN_FORMATS" not in dir(settings):
+        settings.SHOWN_FORMATS = [
+                "standard",
+                "brawl",
+                "pioneer",
+                "pauper",
+                "modern",
+                "legacy",
+                "commander",
+                "vintage",
+                ]
 
 
 get_defaults()

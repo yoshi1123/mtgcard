@@ -596,7 +596,7 @@ class Interface(MTGDatabase):
         """Return a list of cards from database.
 
         :param str  query:   search query
-        :param str  sort:    sort key (cmc, name, or price)
+        :param str  sort:    sort key (cmc, name, price, or setcode)
         :param bool reverse: whether to reverse result order
         :param bool limit:   maximum number of cards to return
 
@@ -605,6 +605,7 @@ class Interface(MTGDatabase):
             "cmc": "convertedManaCost",
             "name": "name",
             "price": "price",
+            "setcode": "setCode",
         }
 
         sql = '''

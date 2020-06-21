@@ -92,7 +92,7 @@ def get_args():
         dest="sort",
         type=str,
         default="name",
-        choices=("name", "cmc", "price"),
+        choices=("name", "cmc", "price", "setcode"),
         help="sort listings (default: %(default)s)",
     )
     parser.add_argument(

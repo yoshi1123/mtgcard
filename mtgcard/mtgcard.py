@@ -396,7 +396,7 @@ def list_cards(
     :param bool        header:        show header in detailed listing
     :param bool        onlynames:     *name listing*
     :param int         onename:       show only one name on a double faced card
-    :param str         sort:          sort key (cmc, name, or price)
+    :param str         sort:          sort key (cmc, name, price, or setcode)
     :param bool        reverse:       whether sort order is reversed
     :param int         limit:         maximum amount of cards to list
     :param bool        ansi:          whether color

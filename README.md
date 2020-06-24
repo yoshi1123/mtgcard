@@ -1,4 +1,4 @@
-# mtgcard
+![logo](./doc/mtgcard_logo.png)
 
 mtgcard is an offline cross-platform command-line MTG card viewer and searcher
 written in python. A sqlite database is generated from a JSON database from

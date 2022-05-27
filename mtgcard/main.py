@@ -179,7 +179,7 @@ def main():
         if update_db:
             import mtgcard.update
 
-            print("updating database... (this could take a while [~45MB])")
+            print("updating database... (this could take a while [>100MB])")
             mtgcard.update.update_database(verbose=verbose)
             print("update complete")
             sys.exit(0)

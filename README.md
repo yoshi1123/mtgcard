@@ -26,7 +26,7 @@ with converted mana cost >=3 OR (2) green cards with converted mana cost <3**:
 
 <img src="./doc/screenshots/list_images.png" width="1354" />
 
-## Features
+# Features
 
 - display card images in plaintext
 - customizable search for cards
@@ -36,14 +36,14 @@ with converted mana cost >=3 OR (2) green cards with converted mana cost <3**:
 - all card layouts (e.g., adventure, split, meld) are supported
 
 
-## Installation (Win, OSX, Linux, and other platforms)
+# Installation (Win, OSX, Linux, and other platforms)
 
     git clone https://github.com/yoshi1123/mtgcard.git /path/to/src
     cd /path/to/src
     pip install --no-index .
 
 
-## Requirements
+# Requirements
 
 - Python 3.x
 

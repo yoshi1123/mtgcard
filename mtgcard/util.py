@@ -29,7 +29,7 @@ from mtgcard.colors import colorize_mana, colorize_format, colorize_set
 def columnize(width, *columns, sep=0, rstrip=False):
     """Return a list of colomnized text.
 
-    :param list columns: columns from left to right
+    :param list columns: lists of column lines from left to right
     :param int  width:   width of columns
     :param int  sep:     number of spaces separating columns
     :param bool rstrip:  whether to strip right-most whitespace

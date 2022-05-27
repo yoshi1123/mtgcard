@@ -337,7 +337,8 @@ def list_cards_detailed(
 
         # r
         if c.rarity:
-            r = {"mythic": "M", "rare": "R", "uncommon": "U", "common": "C"}[
+            r = {"mythic": "M", "rare": "R", "uncommon": "U", "common": "C",
+                    "special": "S"}[
                 c.rarity
             ]
         else:

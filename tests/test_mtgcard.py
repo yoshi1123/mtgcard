@@ -221,6 +221,7 @@ Rumbling Aftershocks
 Shock
 Shock Troops
 Shocker
+Shocking Grasp
 Shockmaw Dragon
 Spellshock
 Staggershock

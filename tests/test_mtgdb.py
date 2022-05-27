@@ -10,6 +10,7 @@ from mtgcard.card import Card
 from mtgcard import mtgdb
 from mtgcard.mtgdb import csv_len, csv_set_contains, manacost_contains
 from mtgcard.mtgdb import manacost_to_cmc, csv_element, csv_in
+from mtgcard.mtgdb import facename_element
 from mtgcard.mtgdb import r_unbraced_char
 from mtgcard.mtgdb import collate_exp_core_first
 from mtgcard.parser import parser
@@ -34,6 +35,15 @@ class TestMTGDatabaseSQLiteInCSV(unittest.TestCase):
 
     def test_none_list(self):
         self.assertFalse(csv_in(None, 'c'))
+
+
+class TestMTGDatabaseSQLiteFaceNameElement(unittest.TestCase):
+
+    def test_facename_first_element(self):
+        text = 'Rimrock Knight // Boulder Rush'
+        actual_result = facename_element(text, 0)
+        expected_result = 'Rimrock Knight'
+        self.assertEqual(actual_result, expected_result)
 
 
 class TestMTGDatabaseSQLiteCSVElement(unittest.TestCase):
@@ -466,11 +476,12 @@ class TestMTGDatabaseGetCards(unittest.TestCase):
         self.assertEqual(cards[4].name, 'Shock')
         self.assertEqual(cards[5].name, 'Shock Troops')
         self.assertEqual(cards[6].name, 'Shocker')
-        self.assertEqual(cards[7].name, 'Shockmaw Dragon')
-        self.assertEqual(cards[8].name, 'Spellshock')
-        self.assertEqual(cards[9].name, 'Staggershock')
-        self.assertEqual(cards[10].name, 'Stoneshock Giant')
-        self.assertEqual(cards[11].name, 'Sudden Shock')
+        self.assertEqual(cards[7].name, 'Shocking Grasp')
+        self.assertEqual(cards[8].name, 'Shockmaw Dragon')
+        self.assertEqual(cards[9].name, 'Spellshock')
+        self.assertEqual(cards[10].name, 'Staggershock')
+        self.assertEqual(cards[11].name, 'Stoneshock Giant')
+        self.assertEqual(cards[12].name, 'Sudden Shock')
 
     def test_partial_name_modern(self):
         cards = db_mtgjson_sqlite.get_cards(parser.parse("Shock f:modern"))
@@ -479,10 +490,11 @@ class TestMTGDatabaseGetCards(unittest.TestCase):
         self.assertEqual(cards[2].name, 'Rumbling Aftershocks')
         self.assertEqual(cards[3].name, 'Shock')
         self.assertEqual(cards[4].name, 'Shock Troops')
-        self.assertEqual(cards[5].name, 'Shockmaw Dragon')
-        self.assertEqual(cards[6].name, 'Staggershock')
-        self.assertEqual(cards[7].name, 'Stoneshock Giant')
-        self.assertEqual(cards[8].name, 'Sudden Shock')
+        self.assertEqual(cards[5].name, 'Shocking Grasp')
+        self.assertEqual(cards[6].name, 'Shockmaw Dragon')
+        self.assertEqual(cards[7].name, 'Staggershock')
+        self.assertEqual(cards[8].name, 'Stoneshock Giant')
+        self.assertEqual(cards[9].name, 'Sudden Shock')
 
     def test_no_adventure_cards(self):
         cards = db_mtgjson_sqlite.get_cards(parser.parse("!'Boulder Rush'"))
@@ -554,7 +566,7 @@ class TestMTGDatabaseGetCard(unittest.TestCase):
         self.assertEqual(c.power      , None)
         self.assertEqual(c.toughness  , None)
         self.assertEqual(c.text       , "Shock deals 2 damage to any target.")
-        self.assertEqual(c.setcode    , "M20")
+        self.assertEqual(c.setcode    , "M21")
 
     def test_modern_rarity(self):
         c = db_mtgjson_sqlite.get_card("Rabid Bite", format="modern")
@@ -622,16 +634,18 @@ class TestMTGDatabaseGetCard(unittest.TestCase):
 
     def test_uuid(self):
         c = db_mtgjson_sqlite.get_card("Rimrock Knight", "ELD")
-        self.assertEqual(c.uuid, "be678625-f685-54be-9d21-f0337c6c4580")
+        self.assertEqual(c.uuid, "21d183eb-268f-5f52-93d6-57b81e615767")
 
     def test_formats(self):
         # NOTE: liable to change
         card = db_mtgjson_sqlite.get_card("Serra Angel", "M15", verbose=True)
         self.assertEqual(card.formats,
-                {'commander': 'Legal', 'duel': 'Legal',
-                 'historic': 'Legal', 'legacy': 'Legal',
-                 'modern': 'Legal', 'penny': 'Legal',
-                 'pioneer': 'Legal', 'vintage': 'Legal'})
+                {'alchemy': 'Legal', 'commander': 'Legal', 'duel': 'Legal',
+                    'explorer': 'Legal', 'gladiator': 'Legal', 'historic':
+                    'Legal', 'historicbrawl': 'Legal', 'legacy': 'Legal',
+                    'modern': 'Legal', 'paupercommander': 'Restricted',
+                    'penny': 'Legal', 'pioneer': 'Legal', 'premodern': 'Legal',
+                    'vintage': 'Legal'})
 
     def test_formats_verbose_false(self):
         # NOTE: liable to change
@@ -706,16 +720,18 @@ class TestMTGDatabaseGetFormats(unittest.TestCase):
 
     def test_has_formats(self):
         # NOTE: liable to change
-        expected_result = {'commander': 'Legal', 'duel': 'Legal',
-                           'historic': 'Legal', 'legacy': 'Legal',
-                           'modern': 'Legal', 'penny': 'Legal',
-                           'pioneer': 'Legal', 'vintage': 'Legal'}
+        expected_result = {'alchemy': 'Legal', 'commander': 'Legal',
+                'duel': 'Legal', 'explorer': 'Legal', 'gladiator': 'Legal',
+                'historic': 'Legal', 'historicbrawl': 'Legal', 'legacy':
+                'Legal', 'modern': 'Legal', 'paupercommander': 'Restricted',
+                'penny': 'Legal', 'pioneer': 'Legal', 'premodern': 'Legal',
+                'vintage': 'Legal'}
 
 
         formats = db_mtgjson_sqlite.get_formats(
                 db_mtgjson_sqlite.get_card("Serra Angel", "M15").uuid)
         self.assertTrue(formats)
-        self.assertEqual(len(formats), 8)
+        self.assertEqual(len(formats), 14)
         self.assertEqual(expected_result, formats)
 
     def test_has_no_formats(self):

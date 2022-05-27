@@ -20,14 +20,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# modified: Apr 29, 2020
+# modified: May 24, 2022
 # source:
 # https://github.com/mtgjson/mtgsqlive/blob/master/mtgsqlive/json2sql.py
 
 """
-Convert MTGJSON v4 -> SQLite
+Convert MTGJSON v4 to SQLite
 """
-import argparse
+
 import json
 import logging
 import pathlib
@@ -36,22 +36,77 @@ import time
 from typing import Any, Dict, List, Union
 
 LOGGER = logging.getLogger(__name__)
+JsonDict = Dict[str, any]
 
 
-def execute(input_file, output_file, extras=False) -> None:
+def execute(json_input, output_file, check_extras=False) -> None:
+    """Main function to handle the logic
+
+    :param json_input: Input file (JSON)
+    :param output_file: Output dir
+    :param extras: additional json files to process
     """
-    Main function
-    """
-    if not validate_io_streams(input_file, output_file, extras):
+    if not valid_input_output(json_input, output_file):
         exit(1)
+    check_extra_inputs(json_input, output_file, check_extras)
 
-    LOGGER.info("Loading JSON into memory")
-    with input_file.open("r", encoding="utf8") as f:
-        json_data = json.load(f)
-    version = getVersion(json_data)
-    # Build the SQLite database/file
+    LOGGER.info("Loading json file into memory")
+    with json_input.open("r", encoding="utf8") as json_file:
+        json_data = json.load(json_file)
+    build_sql_database(output_file, json_data)
+    build_sql_schema(json_data, output_file)
+    parse_and_import_cards(json_data, json_input, output_file)
+    parse_and_import_extras(json_input, output_file)
+    commit_changes_and_close_db(output_file)
+
+
+def valid_input_output(input_file: pathlib.Path,
+                       output_dir: Dict) -> bool:
+    """
+    Ensure I/O paths are valid and clean for program
+    """
+    if not input_file.is_file():
+        LOGGER.fatal(f"Invalid input file/directory {input_file}")
+        return False
+
+    # Create the output directory if it doesn't exist
+    output_dir["path"].parent.mkdir(exist_ok=True)
+    if output_dir["path"].is_file():
+        LOGGER.warning(f"Output path {output_dir['path']} already exists, "
+                       "moving it")
+        # Backup the existing file to another file with .old extension
+        output_dir["path"].replace(
+            output_dir["path"].parent.joinpath(
+                output_dir["path"].name + ".old"
+            )
+        )
+    return True
+
+
+def check_extra_inputs(input_file: pathlib.Path,
+                       output_dir: Dict, check_extras=False) -> None:
+    """
+    Check if there are more json files to convert to sql
+    """
+    extras = ["AllPrices.json", "AllDeckFiles",
+              "Keywords.json", "CardTypes.json"]
+
+    for extra in extras:
+        output_dir[extra] = False
+
+    if not check_extras:
+        return 
+    for extra in extras:
+        if input_file.parent.joinpath(extra).is_file() or input_file.parent.joinpath(extra).is_dir():
+            LOGGER.info("Building with " + extra + " supplement")
+            output_dir[extra] = True
+
+
+def build_sql_database(output_file: str, json_data: JsonDict) -> None:
     if output_file["path"].suffix == ".sql":
+        version = get_version(json_data)
         output_file["handle"] = open(output_file["path"], "w", encoding="utf8")
+        # Create a file header and ensure utf8 encoding
         output_file["handle"].write(
             "\n".join(
                 (
@@ -60,7 +115,7 @@ def execute(input_file, output_file, extras=False) -> None:
                     "-- MTGJSON Version: {}".format(version),
                     "",
                     "START TRANSACTION;",
-                    "SET names 'utf8';",
+                    "SET names 'utf8mb4';",
                     "",
                     "",
                 )
@@ -70,259 +125,24 @@ def execute(input_file, output_file, extras=False) -> None:
         output_file["handle"] = sqlite3.connect(str(output_file["path"]))
         output_file["handle"].execute("pragma journal_mode=wal;")
 
-    build_sql_schema(json_data, output_file)
-    parse_and_import_cards(json_data, input_file, output_file)
-    parse_and_import_extras(input_file, output_file)
-    output_file["handle"].close()
 
-
-def getVersion(json_data: Dict) -> str:
-    for set_code, set_data in json_data.items():
-        if "meta" in set_data:
-            if "version" in set_data["meta"]:
-                return set_data["meta"]["version"]
-    return "Unknown"
-
-
-def validate_io_streams(
-    input_file: pathlib.Path, output_dir: Dict, extras: bool
-) -> bool:
-    """
-    Ensure I/O paths are valid and clean for program
-    :param input_file: Input file (JSON)
-    :param output_dir: Output dir
-    :return: Good to continue status
-    """
-    output_dir.update(
-        {
-            "useAllPrices": False,
-            "useAllDeckFiles": False,
-            "useKeywords": False,
-            "useCardTypes": False,
-        }
-    )
-    if input_file.is_file():
-        LOGGER.info("Building using AllPrintings.json master file.")
-        if extras:
-            if input_file.parent.joinpath("AllPrices.json").is_file():
-                LOGGER.info("Building with AllPrices.json supplement.")
-                output_dir["useAllPrices"] = True
-            if input_file.parent.joinpath("AllDeckFiles").is_dir():
-                LOGGER.info("Building with AllDeckFiles supplement.")
-                output_dir["useAllDeckFiles"] = True
-            if input_file.parent.joinpath("Keywords.json").is_file():
-                LOGGER.info("Building with Keywords.json supplement.")
-                output_dir["useKeywords"] = True
-            if input_file.parent.joinpath("CardTypes.json").is_file():
-                LOGGER.info("Building with CardTypes.json supplement.")
-                output_dir["useCardTypes"] = True
+def get_version(json_data: Dict) -> str:
+    if "meta" in json_data:
+        if "version" in json_data["meta"]:
+            return json_data["meta"]["version"]
     else:
-        LOGGER.fatal(f"Invalid input file/directory. ({input_file})")
-        return False
-
-    output_dir["path"].parent.mkdir(exist_ok=True)
-    if output_dir["path"].is_file():
-        LOGGER.warning(f"Output path {output_dir['path']} exists already, moving it.")
-        output_dir["path"].replace(
-            output_dir["path"].parent.joinpath(output_dir["path"].name + ".old")
-        )
-
-    return True
-
-
-def generate_sql_schema(json_data: Dict, output_file: Dict, distro: str) -> str:
-    """
-    Generate the SQLite DB schema from the JSON input
-    :param data: JSON input dict
-    :param distro: Target SQL distro
-    """
-    tables = {
-        "sets": {},
-        "cards": {},
-        "tokens": {},
-        "prices": {},
-        "rulings": {},
-        "legalities": {},
-        "set_translations": {},
-        "foreign_data": {},
-    }
-    indexes = {
-        "cards": {"uuid": "(36) UNIQUE"},
-        "tokens": {"uuid": "(36)"},
-        "sets": {"code": "(8) UNIQUE"},
-    }
-    # maxLengths = {}
-    for setCode, setData in json_data.items():
-        for setKey, setValue in setData.items():
-            if setKey == "translations":
-                setKey = "set_translations"
-            if setKey in tables:
-                if setKey == "cards" or setKey == "tokens":
-                    for item in setValue:
-                        for propKey, propValue in item.items():
-                            if propKey == "foreignData":
-                                propKey = "foreign_data"
-                            if propKey in tables:
-                                if propKey == "foreign_data":
-                                    if not tables["foreign_data"]:
-                                        tables["foreign_data"] = {
-                                            "flavorText": "TEXT",
-                                            "language": "TEXT",
-                                            "multiverseId": "INTEGER",
-                                            "name": "TEXT",
-                                            "text": "TEXT",
-                                            "type": "TEXT",
-                                        }
-                                if propKey == "legalities":
-                                    if not tables["legalities"]:
-                                        tables["legalities"] = {
-                                            "format": "TEXT",
-                                            "status": "TEXT",
-                                        }
-                                if propKey == "rulings":
-                                    if not tables["rulings"]:
-                                        tables["rulings"] = {
-                                            "text": "TEXT",
-                                            "date": "DATE",
-                                        }
-                                        if distro == "sqlite":
-                                            tables["rulings"]["date"] = "TEXT"
-                                if propKey == "prices":
-                                    if not tables["prices"]:
-                                        tables["prices"] = {
-                                            "price": "REAL",
-                                            "type": "TEXT",
-                                            "date": "DATE",
-                                        }
-                                        if distro == "sqlite":
-                                            tables["prices"]["date"] = "TEXT"
-                                if not "uuid" in tables[propKey]:
-                                    if distro == "sqlite":
-                                        tables[propKey][
-                                            "uuid"
-                                        ] = "TEXT(36) REFERENCES cards(uuid) ON UPDATE CASCADE ON DELETE CASCADE"
-                                    else:
-                                        tables[propKey][
-                                            "uuid"
-                                        ] = "VARCHAR(36) NOT NULL,\n    INDEX(uuid),\n    FOREIGN KEY (uuid) REFERENCES cards(uuid) ON UPDATE CASCADE ON DELETE CASCADE"
-                            else:
-                                if not propKey in tables[setKey].keys():
-                                    if isinstance(propValue, str):
-                                        tables[setKey][propKey] = "TEXT"
-                                    if isinstance(propValue, int):
-                                        tables[setKey][propKey] = "INTEGER"
-                                    if isinstance(propValue, float):
-                                        tables[setKey][propKey] = "FLOAT"
-                                    if isinstance(propValue, bool):
-                                        tables[setKey][
-                                            propKey
-                                        ] = "INTEGER NOT NULL DEFAULT 0"
-                                    if isinstance(propValue, list):
-                                        tables[setKey][propKey] = "TEXT"
-                                    if isinstance(propValue, dict):
-                                        tables[setKey][propKey] = "TEXT"
-                                    if propKey in indexes[setKey]:
-                                        if distro == "sqlite":
-                                            tables[setKey][propKey] += (
-                                                indexes[setKey][propKey] + " NOT NULL"
-                                            )
-                                        else:
-                                            tables[setKey][propKey] = (
-                                                "VARCHAR"
-                                                + indexes[setKey][propKey]
-                                                + " NOT NULL"
-                                            )
-                if setKey == "set_translations":
-                    if not tables["set_translations"]:
-                        tables["set_translations"] = {
-                            "language": "TEXT",
-                            "translation": "TEXT",
-                        }
-                if not "setCode" in tables[setKey]:
-                    if distro == "sqlite":
-                        tables[setKey][
-                            "setCode"
-                        ] = "TEXT(8) REFERENCES sets(code) ON UPDATE CASCADE ON DELETE CASCADE"
-                    else:
-                        tables[setKey][
-                            "setCode"
-                        ] = "VARCHAR(8) NOT NULL,\n    INDEX(setCode),\n    FOREIGN KEY (setCode) REFERENCES sets(code) ON UPDATE CASCADE ON DELETE CASCADE"
-            else:
-                if not setKey in tables["sets"].keys():
-                    if setKey == "releaseDate" and not distro == "sqlite":
-                        tables["sets"][setKey] = "DATE"
-                    elif isinstance(setValue, str):
-                        tables["sets"][setKey] = "TEXT"
-                    elif isinstance(setValue, int):
-                        tables["sets"][setKey] = "INTEGER"
-                    elif isinstance(setValue, float):
-                        tables["sets"][setKey] = "FLOAT"
-                    elif isinstance(setValue, bool):
-                        tables["sets"][setKey] = "INTEGER NOT NULL DEFAULT 0"
-                    elif isinstance(setValue, list):
-                        tables["sets"][setKey] = "TEXT"
-                    elif isinstance(setValue, dict):
-                        tables["sets"][setKey] = "TEXT"
-                    if setKey in indexes["sets"]:
-                        if distro == "sqlite":
-                            tables["sets"][setKey] += (
-                                indexes["sets"][setKey] + " NOT NULL"
-                            )
-                        else:
-                            tables["sets"][setKey] = (
-                                "VARCHAR" + indexes["sets"][setKey] + " NOT NULL"
-                            )
-    # extra tables
-    if output_file["useAllDeckFiles"]:
-        tables["decks"] = {
-            "fileName": "TEXT",
-            "name": "TEXT",
-            "mainboard": "TEXT NOT NULL",
-            "sideboard": "TEXT",
-            "type": "TEXT",
-        }
-        if distro == "sqlite":
-            tables["decks"]["releaseDate"] = "TEXT"
-            tables["decks"][
-                "code"
-            ] = "TEXT(8) REFERENCES sets(code) ON UPDATE CASCADE ON DELETE CASCADE"
-        else:
-            tables["decks"]["releaseDate"] = "DATE"
-            tables["decks"][
-                "code"
-            ] = "VARCHAR(8) NOT NULL,\n    INDEX(code),\n    FOREIGN KEY (code) REFERENCES sets(code) ON UPDATE CASCADE ON DELETE CASCADE"
-    if output_file["useKeywords"]:
-        tables["keywords"] = {"word": "TEXT UNIQUE NOT NULL", "type": "TEXT NOT NULL"}
-    if output_file["useCardTypes"]:
-        tables["types"] = {
-            "type": "TEXT UNIQUE NOT NULL",
-            "subTypes": "TEXT",
-            "supertypes": "TEXT",
-        }
-    # create query string
-    q = ""
-    for tableName, tableData in tables.items():
-        q += f"CREATE TABLE `{tableName}` (\n"
-        if distro == "sqlite":
-            q += "    id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
-        else:
-            q += "    id INTEGER PRIMARY KEY AUTO_INCREMENT,\n"
-        for colName in sorted(tableData.keys()):
-            q += f"    {colName} {tableData[colName]},\n"
-        if distro == "sqlite":
-            q = q[:-2] + "\n);\n\n"
-        else:
-            q = q[:-2] + "\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\n"
-
-    return q
+        for set_code, set_data in json_data.items():
+            if "meta" in set_data:
+                if "version" in set_data["meta"]:
+                    return set_data["meta"]["version"]
+    return "Unknown"
 
 
 def build_sql_schema(json_data: Dict, output_file: Dict) -> None:
     """
     Create the SQLite DB schema
-    :param output_file: Output info dict
     """
-    LOGGER.info("Building SQLite Schema")
+    LOGGER.info("Building SQLite schema")
     if output_file["path"].suffix == ".sql":
         schema = generate_sql_schema(json_data, output_file, "mysql")
         output_file["handle"].write(schema)
@@ -334,73 +154,511 @@ def build_sql_schema(json_data: Dict, output_file: Dict) -> None:
         output_file["handle"].commit()
 
 
+def generate_sql_schema(json_data: Dict,
+                        output_file: Dict, engine: str) -> str:
+    """
+    Generate the SQL database schema from the JSON input
+
+    The function loops through the json data and builds an object
+    specifying what columns and data types should be in the SQL tables,
+    then uses that object to output an actual SQL query string to make
+    the table.
+    :param json_data: JSON dictionary
+    :param engine: target SQL engine
+    """
+    
+    version = get_version(json_data)
+    schema = {
+        "sets": {},
+        "cards": {},
+        "tokens": {},
+        "rulings": {
+            "text": {"type": "TEXT"},
+            "date": {"type": "DATE"},
+        },
+        "legalities": {
+            "format": {"type": "TEXT" if engine == "sqlite" else "ENUM"},
+            "status": {"type": "TEXT" if engine == "sqlite" else "ENUM"},
+        },
+        "foreign_data": {
+            "flavorText": {"type": "TEXT"},
+            "language": {"type": "TEXT" if engine == "sqlite" else "ENUM"},
+            "multiverseid": {"type": "INTEGER"},
+            "name": {"type": "TEXT"},
+            "text": {"type": "TEXT"},
+            "type": {"type": "TEXT"},
+        },
+        "set_translations": {
+            "language": {"type": "TEXT" if engine == "sqlite" else "ENUM"},
+            "translation": {"type": "TEXT"},
+        },
+    }
+    indexes = {
+        "cards": {"uuid": "(36) UNIQUE"},
+        "tokens": {"uuid": "(36)"},
+        "sets": {"code": "(8) UNIQUE"},
+    }
+    enums = {
+        "sets": ["type"],
+        "prices": ["type"],
+        "foreign_data": ["language"],
+        "set_translations": ["language"],
+        "legalities": ["format", "status"],
+        "cards": ["borderColor", "frameEffect", "frameVersion", "layout",
+                  "rarity"],
+        "tokens": ["borderColor", "layout"],
+    }
+    if "data" in json_data:
+        json_data = json_data["data"]
+    # To understand the following code you may need to open
+    # https://www.mtgjson.com/files/AllPrintings.json
+    # to see the json structure
+    for setCode, setData in json_data.items():
+        # loop through the set properties
+        for setKey, setValue in setData.items():
+            if setKey == "translations":
+                setKey = "set_translations"
+            # determine if the set property should be its own table
+            if setKey in schema:
+                if setKey == "cards" or setKey == "tokens":
+                    # loop through each card/token property
+                    for card in setValue:
+                        for cardKey, cardValue in card.items():
+                            if cardKey == "foreignData":
+                                cardKey = "foreign_data"
+                            # handle identifiers property
+                            if cardKey == "identifiers":
+                                for idKey, idValue in cardValue.items():
+                                    if not idKey in schema[setKey]:
+                                        schema[setKey][idKey] = {
+                                            "type": get_sql_type(idValue, engine)
+                                        }
+                                continue
+                            # determine if the card/token property is a table
+                            if cardKey in schema:
+                                # handle enum options
+                                if cardKey in enums:
+                                    if cardKey == "foreign_data":
+                                        if schema[cardKey]["language"]["type"] == "ENUM":
+                                            for foreign in cardValue:
+                                                if "options" in schema[cardKey]["language"]:
+                                                    if foreign["language"] not in schema[cardKey]["language"]["options"]:
+                                                        schema[cardKey]["language"]["options"].append(foreign["language"])
+                                                else:
+                                                    schema[cardKey]["language"]["options"] = [foreign["language"]]
+                                    elif cardKey == "legalities":
+                                        if schema[cardKey]["format"]["type"] == "ENUM":
+                                            for format in cardValue.keys():
+                                                if "options" in schema[cardKey]["format"]:
+                                                    if format not in schema[cardKey]["format"]["options"]:
+                                                        schema[cardKey]["format"]["options"].append(format)
+                                                else:
+                                                    schema[cardKey]["format"]["options"] = [format]
+                                        if schema[cardKey]["status"]["type"] == "ENUM":
+                                            for status in cardValue.values():
+                                                if "options" in schema[cardKey]["status"]:
+                                                    if status not in schema[cardKey]["status"]["options"]:
+                                                        schema[cardKey]["status"]["options"].append(status)
+                                                else:
+                                                    schema[cardKey]["status"]["options"] = [status]
+                                    elif cardKey == "prices":
+                                        if schema[cardKey]["type"]["type"] == "ENUM":
+                                            for type in cardValue.keys():
+                                                if "options" in schema[cardKey]["type"]:
+                                                    if type not in schema[cardKey]["type"]["options"]:
+                                                        schema[cardKey]["type"]["options"].append(type)
+                                                else:
+                                                    schema[cardKey]["type"]["options"] = [type]
+                                # create the 'uuid' foreign key for each reference table
+                                if "uuid" not in schema[cardKey]:
+                                    if engine == "sqlite":
+                                        schema[cardKey]["uuid"] = {
+                                            "type": "TEXT(36) REFERENCES cards(uuid) ON UPDATE CASCADE ON DELETE CASCADE"
+                                        }
+                                    else:
+                                        schema[cardKey]["uuid"] = {
+                                            "type": "CHAR(36) NOT NULL,\n    INDEX(uuid),\n    FOREIGN KEY (uuid) REFERENCES cards(uuid) ON UPDATE CASCADE ON DELETE CASCADE"
+                                        }
+                            else:  # 'cards' table properties
+                                # determine if the card property is already in the list
+                                if cardKey in schema[setKey].keys():
+                                    if cardKey in enums[setKey] and not engine == "sqlite":
+                                        if cardValue not in schema[setKey][cardKey]["options"]:
+                                            schema[setKey][cardKey]["options"].append(cardValue)
+                                else:
+                                    if cardKey in enums[setKey] and not engine == "sqlite":
+                                        schema[setKey][cardKey] = {"type": "ENUM", "options": [cardValue]}
+                                    else:
+                                        # determine type of the property
+                                        schema[setKey][cardKey] = {
+                                            "type": get_sql_type(cardValue, engine)
+                                        }
+                                    # determine if the card property is an index
+                                    if cardKey in indexes[setKey]:
+                                        if engine == "sqlite":
+                                            schema[setKey][cardKey]["type"] += (
+                                                indexes[setKey][cardKey] + " NOT NULL"
+                                            )
+                                        else:
+                                            schema[setKey][cardKey]["type"] = (
+                                                "CHAR"
+                                                + indexes[setKey][cardKey]
+                                                + " NOT NULL"
+                                            )
+                if setKey == "set_translations":
+                    if schema[setKey]["language"]["type"] == "ENUM":
+                        if setValue:
+                            for language in setValue.keys():
+                                if "options" not in schema[setKey]["language"]:
+                                    schema[setKey]["language"]["options"] = [language]
+                                else:
+                                    if language not in schema[setKey]["language"]["options"]:
+                                        schema[setKey]["language"]["options"].append(language)
+                # add 'setCode' to each table that references 'sets'
+                if "setCode" not in schema[setKey]:
+                    if engine == "sqlite":
+                        schema[setKey]["setCode"] = {
+                            "type": "TEXT(8) REFERENCES sets(code) ON UPDATE CASCADE ON DELETE CASCADE"
+                        }
+                    else:
+                        schema[setKey]["setCode"] = {
+                            "type": "VARCHAR(8) NOT NULL,\n    INDEX(setCode),\n    FOREIGN KEY (setCode) REFERENCES sets(code) ON UPDATE CASCADE ON DELETE CASCADE"
+                        }
+            else:  # 'sets' table properties
+                if setKey in schema["sets"].keys():
+                    # if the property type is enum add the value to list if necessary
+                    if setKey in enums["sets"] and not engine == "sqlite":
+                        if setValue not in schema["sets"][setKey]["options"]:
+                            schema["sets"][setKey]["options"].append(setValue)
+                else:
+                    # handle boosters
+                    if setKey == "booster":
+                        if engine == "sqlite":
+                            schema["sets"]["booster"] = {"type": "TEXT"}
+                        else:
+                            schema["sets"]["booster"] = {"type": "LONGTEXT"}
+                        continue
+                    # determine type of the set property
+                    if setKey in enums["sets"] and not engine == "sqlite":
+                        schema["sets"][setKey] = {"type": "ENUM", "options": [setValue]}
+                    elif setKey == "releaseDate":
+                        schema["sets"][setKey] = {"type": "DATE"}
+                    else:
+                        schema["sets"][setKey] = {
+                            "type": get_sql_type(setValue, engine)
+                        }
+                    if setKey in indexes["sets"]:
+                        if engine == "sqlite":
+                            schema["sets"][setKey]["type"] += (
+                                indexes["sets"][setKey] + " NOT NULL"
+                            )
+                        else:
+                            schema["sets"][setKey]["type"] = (
+                                "VARCHAR" + indexes["sets"][setKey] + " NOT NULL"
+                            )
+
+    # add extra tables manually if necessary
+    if version.startswith("5"):
+        schema["meta"] = {
+            "date": {"type": "DATE"},
+            "version": {"type": "TEXT"},
+        }
+    if output_file["AllPrices.json"] or version.startswith("4"):
+        schema["prices"] = {
+            "uuid": { "type": "TEXT(36) REFERENCES cards(uuid) ON UPDATE CASCADE ON DELETE CASCADE" if engine == "sqlite" else "CHAR(36) NOT NULL,\n    INDEX(uuid),\n    FOREIGN KEY (uuid) REFERENCES cards(uuid) ON UPDATE CASCADE ON DELETE CASCADE" },
+            "price": {"type": "FLOAT" if engine == "sqlite" else "DECIMAL(8,2)"},
+            "type": {"type": "TEXT" if engine == "sqlite" else "ENUM"},
+            "date": {"type": "DATE"},
+        }
+    
+    if output_file["AllDeckFiles"]:
+        schema["decks"] = {
+            "fileName": {"type": "TEXT"},
+            "name": {"type": "TEXT"},
+            "mainboard": {"type": "TEXT NOT NULL"},
+            "sideboard": {"type": "TEXT"},
+            "type": {"type": "TEXT"},
+            "releaseDate": {"type": "TEXT"},
+            "code": {
+                "type": "TEXT(8) REFERENCES sets(code) ON UPDATE CASCADE ON DELETE CASCADE"
+                if engine == "sqlite"
+                else "VARCHAR(8) NOT NULL,\n    INDEX(code),\n    FOREIGN KEY (code) REFERENCES sets(code) ON UPDATE CASCADE ON DELETE CASCADE"
+            },
+        }
+    if output_file["Keywords.json"]:
+        schema["keywords"] = {
+            "word": {"type": "TEXT UNIQUE NOT NULL"},
+            "type": {"type": "TEXT NOT NULL"},
+        }
+    if output_file["CardTypes.json"]:
+        schema["types"] = {
+            "type": {"type": "TEXT UNIQUE NOT NULL"},
+            "subTypes": {"type": "TEXT"},
+            "supertypes": {"type": "TEXT"},
+        }
+    return get_query_from_dict(schema, engine)
+
+
+def get_sql_type(mixed, engine: str) -> str:
+    """
+    Return a string with the type of the parameter mixed
+
+    The type depends on the SQL engine in some cases
+    """
+    if isinstance(mixed, str) or isinstance(mixed, list) or isinstance(mixed, dict):
+        return "TEXT"
+    elif isinstance(mixed, bool):
+        if engine == "sqlite":
+            return "INTEGER NOT NULL DEFAULT 0"
+        else:
+            return "TINYINT(1) NOT NULL DEFAULT 0"
+    elif isinstance(mixed, float):
+        return "FLOAT"
+    elif isinstance(mixed, int):
+        return "INTEGER"
+    return "TEXT"
+
+
+def get_query_from_dict(schema, engine):
+    q = ""
+    for table_name, table_data in schema.items():
+        q += f"CREATE TABLE `{table_name}` (\n"
+        if engine == "sqlite":
+            q += "    id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
+        else:
+            q += "    id INTEGER PRIMARY KEY AUTO_INCREMENT,\n"
+        for attribute in sorted(table_data.keys()):
+            if table_data[attribute]["type"] == "ENUM" and "options" not in table_data[attribute]:
+                table_data[attribute]["type"] = "TEXT"
+            q += f"    {attribute} {table_data[attribute]['type']}"
+            if table_data[attribute]["type"] == "ENUM":
+                q += "('" + "', '".join(table_data[attribute]["options"]) + "')"
+            q += ",\n"
+        if engine == "sqlite":
+            q = q[:-2] + "\n);\n\n"
+        else:
+            q = q[:-2] + "\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\n"
+
+    return q
+
+
 def parse_and_import_cards(
     json_data: Dict, input_file: pathlib.Path, output_file: Dict
 ) -> None:
     """
     Parse the JSON cards and input them into the database
-    :param input_file: AllSets.json file
+
+    :param input_file: AllPrintings.json file
     :param output_file: Output info dictionary
     """
     LOGGER.info("Building sets")
+    if "data" in json_data:
+        sql_dict_insert(json_data["meta"], "meta", output_file)
+        json_data = json_data["data"]
     for set_code, set_data in json_data.items():
-        # Handle set insertion
-        LOGGER.info("Inserting set row for {}".format(set_code))
+        LOGGER.info(f"Inserting set row for {set_code}")
         set_insert_values = handle_set_row_insertion(set_data)
         sql_dict_insert(set_insert_values, "sets", output_file)
 
         for card in set_data.get("cards"):
-            LOGGER.debug("Inserting card row for {}".format(card.get("name")))
-            card_attr: Dict[str, Any] = handle_card_row_insertion(card, set_code)
+            LOGGER.debug(f"Inserting card row for {card.get('name')}")
+            card_attr: JsonDict = handle_card_row_insertion(card, set_code)
             sql_insert_all_card_fields(card_attr, output_file)
 
         for token in set_data.get("tokens"):
-            LOGGER.debug("Inserting token row for {}".format(token.get("name")))
+            LOGGER.debug(f"Inserting token row for {token.get('name')}")
             token_attr = handle_token_row_insertion(token, set_code)
             sql_dict_insert(token_attr, "tokens", output_file)
 
         for language, translation in set_data.get("translations", {}).items():
-            LOGGER.debug("Inserting set_translation row for {}".format(language))
+            LOGGER.debug(f"Inserting set_translation row for {language}")
             set_translation_attr = handle_set_translation_row_insertion(
                 language, translation, set_code
             )
             sql_dict_insert(set_translation_attr, "set_translations", output_file)
 
-    if output_file["path"].suffix == ".sql":
-        output_file["handle"].write("COMMIT;")
-    else:
-        output_file["handle"].commit()
+
+def handle_set_row_insertion(set_data: JsonDict) -> JsonDict:
+    """
+    This method will take the set data and convert it,
+    preparing for SQLite insertion
+
+    :param set_data: Data to process
+    :return: Dictionary ready for insertion
+    """
+    set_skip_keys = ["cards", "tokens", "translations"]
+    set_insert_values = {}
+
+    for key, value in set_data.items():
+        if key in set_skip_keys:
+            continue
+
+        if key == "boosterV3":
+            set_insert_values[key] = modify_for_sql_insert(str(value))
+            continue
+
+        set_insert_values[key] = modify_for_sql_insert(value)
+
+    return set_insert_values
+
+
+def handle_card_row_insertion(card_data: JsonDict, set_name: str) -> JsonDict:
+    """
+    This method will take the card data and convert it,
+    preparing for SQLite insertion
+
+    :param card_data: Data to process
+    :param set_name: Set name, as it's a card element
+    :return: Dictionary ready for insertion
+    """
+    # ORDERING MATTERS HERE
+    card_skip_keys = ["foreignData", "legalities", "rulings", "prices"]
+
+    card_insert_values: JsonDict = {"setCode": set_name}
+    for key, value in card_data.items():
+        if key in card_skip_keys:
+            continue
+        if key == "identifiers":
+            for idKey, idValue in value.items():
+                card_insert_values[idKey] = modify_for_sql_insert(idValue)
+        else:
+            card_insert_values[key] = modify_for_sql_insert(value)
+
+    foreign_insert_values: List[JsonDict] = []
+    if card_skip_keys[0] in card_data.keys():
+        foreign_insert_values = handle_foreign_rows(card_data, card_data["uuid"])
+
+    legal_insert_values: List[JsonDict] = []
+    if card_skip_keys[1] in card_data.keys():
+        legal_insert_values = handle_legal_rows(card_data, card_data["uuid"])
+
+    ruling_insert_values: List[JsonDict] = []
+    if card_skip_keys[2] in card_data.keys():
+        ruling_insert_values = handle_ruling_rows(card_data, card_data["uuid"])
+
+    price_insert_values: List[JsonDict] = []
+    if card_skip_keys[3] in card_data.keys():
+        price_insert_values = handle_price_rows(card_data, card_data["uuid"])
+
+    return {
+        "cards": card_insert_values,
+        "foreign_data": foreign_insert_values,
+        "legalities": legal_insert_values,
+        "rulings": ruling_insert_values,
+        "prices": price_insert_values,
+    }
+
+
+def sql_insert_all_card_fields(
+    card_attributes: JsonDict, output_file: Dict
+) -> None:
+    """
+    Given all of the card's data, insert the data into the
+    appropriate SQLite tables.
+
+    :param card_attributes: Tuple of data
+    :param output_file: Output info dictionary
+    """
+    sql_dict_insert(card_attributes["cards"], "cards", output_file)
+
+    for foreign_val in card_attributes["foreign_data"]:
+        sql_dict_insert(foreign_val, "foreign_data", output_file)
+
+    for legal_val in card_attributes["legalities"]:
+        sql_dict_insert(legal_val, "legalities", output_file)
+
+    for rule_val in card_attributes["rulings"]:
+        sql_dict_insert(rule_val, "rulings", output_file)
+
+    if not output_file["AllPrices.json"]:
+        for price_val in card_attributes["prices"]:
+            sql_dict_insert(price_val, "prices", output_file)
+
+
+def handle_token_row_insertion(token_data: JsonDict, set_name: str) -> JsonDict:
+    """
+    This method will take the token data and convert it,
+    preparing for SQLite insertion
+
+    :param token_data: Data to process
+    :param set_name: Set name, as it's a card element
+    :return: Dictionary ready for insertion
+    """
+    token_insert_values: JsonDict = {"setCode": set_name}
+    for key, value in token_data.items():
+        if key == "identifiers":
+            for idKey, idValue in value.items():
+                token_insert_values[idKey] = modify_for_sql_insert(idValue)
+        else:
+            token_insert_values[key] = modify_for_sql_insert(value)
+
+    return token_insert_values
+
+
+def handle_set_translation_row_insertion(
+    language: str, translation: str, set_name: str
+) -> JsonDict:
+    """
+    This method will take the set translation data and convert it,
+    preparing for SQLite insertion
+
+    :param language: The language of the set translation
+    :param translation: The set name translated in to the given language
+    :param set_name: Set name, as it's a card element
+    :return: Dictionary ready for insertion
+    """
+    set_translation_insert_values: JsonDict = {
+        "language": language,
+        "translation": translation,
+        "setCode": set_name,
+    }
+
+    return set_translation_insert_values
 
 
 def parse_and_import_extras(input_file: pathlib.Path, output_file: Dict) -> None:
     """
     Parse the extra data files and input them into the database
-    :param input_file: AllSets.json file
+
+    :param input_file: AllPrintings.json file
     :param output_file: Output info dictionary
     """
-    if output_file["useAllPrices"]:
+    # this function has been modified for mtgcard (2022-05-27)
+    card_type = "paper"
+    price_source = "cardkingdom"
+    price_type = "retail"
+    card_subtype = "normal"
+    if output_file["AllPrices.json"]:
         LOGGER.info("Inserting AllPrices rows")
         with input_file.parent.joinpath("AllPrices.json").open(
             "r", encoding="utf8"
         ) as f:
             json_data = json.load(f)
-        for card_uuid, price_data in json_data.items():
-            for price_type, price_dict in price_data["prices"].items():
-                if not price_type == "uuid":
-                    for price_date, price_value in price_dict.items():
-                        if price_value:
-                            sql_dict_insert(
-                                {
-                                    "uuid": card_uuid,
-                                    "type": price_type,
-                                    "date": price_date,
-                                    "price": float(price_value),
-                                },
-                                "prices",
-                                output_file,
-                            )
+        for card_uuid, price_data in json_data['data'].items():
+            if card_type in price_data.keys():
+                price_sources = price_data[card_type]
+                if price_source in price_sources.keys():
+                    price_types = price_sources[price_source]
+                    if price_type in price_types.keys():
+                        card_subtypes = price_types[price_type]
+                        if card_subtype in card_subtypes.keys():
+                            card_dates = card_subtypes[card_subtype]
+                            if len(card_dates) > 0:
+                                price_date = list(card_dates.keys())[-1]
+                                price_value = card_dates[price_date]
+                                if price_value:
+                                    sql_dict_insert(
+                                        {
+                                            "uuid": card_uuid,
+                                            "type": card_type,
+                                            "date": price_date,
+                                            "price": float(price_value),
+                                        },
+                                        "prices",
+                                        output_file,
+                                    )
 
-    if output_file["useAllDeckFiles"]:
+    if output_file["AllDeckFiles"]:
         LOGGER.info("Inserting Deck rows")
         for deck_file in input_file.parent.joinpath("AllDeckFiles").glob("*.json"):
             with deck_file.open("r", encoding="utf8") as f:
@@ -417,11 +675,11 @@ def parse_and_import_extras(input_file: pathlib.Path, output_file: Dict) -> None
                     deck_data[key] = ", ".join(cards)
                 else:
                     deck_data[key] = value
-            if not "fileName" in deck_data:
+            if "fileName" not in deck_data:
                 deck_data["fileName"] = deck_file.stem
             sql_dict_insert(deck_data, "decks", output_file)
 
-    if output_file["useKeywords"]:
+    if output_file["Keywords.json"]:
         LOGGER.info("Inserting Keyword rows")
         with input_file.parent.joinpath("Keywords.json").open(
             "r", encoding="utf8"
@@ -435,7 +693,7 @@ def parse_and_import_extras(input_file: pathlib.Path, output_file: Dict) -> None
                     {"word": keyword, "type": keyword_type}, "keywords", output_file
                 )
 
-    if output_file["useCardTypes"]:
+    if output_file["CardTypes.json"]:
         LOGGER.info("Inserting Card Type rows")
         with input_file.parent.joinpath("CardTypes.json").open(
             "r", encoding="utf8"
@@ -458,66 +716,14 @@ def parse_and_import_extras(input_file: pathlib.Path, output_file: Dict) -> None
                 output_file,
             )
 
-    if output_file["path"].suffix == ".sql":
-        output_file["handle"].write("COMMIT;")
-    else:
-        output_file["handle"].commit()
-
-
-def sql_insert_all_card_fields(
-    card_attributes: Dict[str, Any], output_file: Dict
-) -> None:
-    """
-    Given all of the card's data, insert the data into the
-    appropriate SQLite tables.
-    :param card_attributes: Tuple of data
-    :param output_file: Output info dictionary
-    """
-    sql_dict_insert(card_attributes["cards"], "cards", output_file)
-
-    for foreign_val in card_attributes["foreign_data"]:
-        sql_dict_insert(foreign_val, "foreign_data", output_file)
-
-    for legal_val in card_attributes["legalities"]:
-        sql_dict_insert(legal_val, "legalities", output_file)
-
-    for rule_val in card_attributes["rulings"]:
-        sql_dict_insert(rule_val, "rulings", output_file)
-
-    if not output_file["useAllPrices"]:
-        for price_val in card_attributes["prices"]:
-            sql_dict_insert(price_val, "prices", output_file)
-
-
-def handle_set_row_insertion(set_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    This method will take the set data and convert it, preparing
-    for SQLite insertion
-    :param set_data: Data to process
-    :return: Dictionary ready for insertion
-    """
-    set_skip_keys = ["cards", "tokens", "translations"]
-    set_insert_values = {}
-
-    for key, value in set_data.items():
-        if key in set_skip_keys:
-            continue
-
-        if key == "boosterV3":
-            set_insert_values[key] = modify_for_sql_insert(str(value))
-            continue
-
-        set_insert_values[key] = modify_for_sql_insert(value)
-
-    return set_insert_values
-
 
 def handle_foreign_rows(
-    card_data: Dict[str, Any], card_uuid: str
-) -> List[Dict[str, Any]]:
+    card_data: JsonDict, card_uuid: str
+) -> List[JsonDict]:
     """
-    This method will take the card data and convert it, preparing
-    for SQLite insertion
+    This method will take the card data and convert it,
+    preparing for SQLite insertion
+
     :param card_data: Data to process
     :param card_uuid: UUID to be used as a key
     :return: List of dicts ready for insertion
@@ -541,11 +747,12 @@ def handle_foreign_rows(
 
 
 def handle_legal_rows(
-    card_data: Dict[str, Any], card_uuid: str
-) -> List[Dict[str, Any]]:
+    card_data: JsonDict, card_uuid: str
+) -> List[JsonDict]:
     """
-    This method will take the card data and convert it, preparing
-    for SQLite insertion
+    This method will take the card data and convert it,
+    preparing for SQLite insertion
+
     :param card_data: Data to process
     :param card_uuid: UUID to be used as a key
     :return: List of dicts, ready for insertion
@@ -560,11 +767,11 @@ def handle_legal_rows(
 
 
 def handle_ruling_rows(
-    card_data: Dict[str, Any], card_uuid: str
-) -> List[Dict[str, Any]]:
-    """
-    This method will take the card data and convert it, preparing
-    for SQLite insertion
+    card_data: JsonDict, card_uuid: str
+) -> List[JsonDict]:
+    """This method will take the card data and convert it,
+    preparing for SQLite insertion
+
     :param card_data: Data to process
     :param card_uuid: UUID to be used as a key
     :return: List of dicts, ready for insertion
@@ -582,11 +789,11 @@ def handle_ruling_rows(
 
 
 def handle_price_rows(
-    card_data: Dict[str, Any], card_uuid: str
-) -> List[Dict[str, Any]]:
-    """
-    This method will take the card data and convert it, preparing
-    for SQLite insertion
+    card_data: JsonDict, card_uuid: str
+) -> List[JsonDict]:
+    """This method will take the card data and convert it,
+    preparing for SQLite insertion
+
     :param card_data: Data to process
     :param card_uuid: UUID to be used as a key
     :return: List of dicts, ready for insertion
@@ -607,90 +814,10 @@ def handle_price_rows(
     return prices
 
 
-def handle_set_translation_row_insertion(
-    language: str, translation: str, set_name: str
-) -> Dict[str, Any]:
-    """
-    This method will take the set translation data and convert it, preparing
-    for SQLite insertion
-    :param language: The language of the set translation
-    :param translation: The set name translated in to the given language
-    :param set_name: Set name, as it's a card element
-    :return: Dictionary ready for insertion
-    """
-    set_translation_insert_values: Dict[str, Any] = {
-        "language": language,
-        "translation": translation,
-        "setCode": set_name,
-    }
-
-    return set_translation_insert_values
-
-
-def handle_token_row_insertion(
-    token_data: Dict[str, Any], set_name: str
-) -> Dict[str, Any]:
-    """
-    This method will take the token data and convert it, preparing
-    for SQLite insertion
-    :param token_data: Data to process
-    :param set_name: Set name, as it's a card element
-    :return: Dictionary ready for insertion
-    """
-    token_insert_values: Dict[str, Any] = {"setCode": set_name}
-    for key, value in token_data.items():
-        token_insert_values[key] = modify_for_sql_insert(value)
-
-    return token_insert_values
-
-
-def handle_card_row_insertion(
-    card_data: Dict[str, Any], set_name: str
-) -> Dict[str, Any]:
-    """
-    This method will take the card data and convert it, preparing
-    for SQLite insertion
-    :param card_data: Data to process
-    :param set_name: Set name, as it's a card element
-    :return: Dictionary ready for insertion
-    """
-    # ORDERING MATTERS HERE
-    card_skip_keys = ["foreignData", "legalities", "rulings", "prices"]
-
-    card_insert_values: Dict[str, Any] = {"setCode": set_name}
-    for key, value in card_data.items():
-        if key in card_skip_keys:
-            continue
-        card_insert_values[key] = modify_for_sql_insert(value)
-
-    foreign_insert_values: List[Dict[str, Any]] = []
-    if card_skip_keys[0] in card_data.keys():
-        foreign_insert_values = handle_foreign_rows(card_data, card_data["uuid"])
-
-    legal_insert_values: List[Dict[str, Any]] = []
-    if card_skip_keys[1] in card_data.keys():
-        legal_insert_values = handle_legal_rows(card_data, card_data["uuid"])
-
-    ruling_insert_values: List[Dict[str, Any]] = []
-    if card_skip_keys[2] in card_data.keys():
-        ruling_insert_values = handle_ruling_rows(card_data, card_data["uuid"])
-
-    price_insert_values: List[Dict[str, Any]] = []
-    if card_skip_keys[3] in card_data.keys():
-        price_insert_values = handle_price_rows(card_data, card_data["uuid"])
-
-    return {
-        "cards": card_insert_values,
-        "foreign_data": foreign_insert_values,
-        "legalities": legal_insert_values,
-        "rulings": ruling_insert_values,
-        "prices": price_insert_values,
-    }
-
-
 def modify_for_sql_insert(data: Any) -> Union[str, int, float, None]:
     """
     Arrays and booleans can't be inserted, so we need to stringify
+
     :param data: Data to modify
     :return: string value
     """
@@ -713,7 +840,7 @@ def modify_for_sql_insert(data: Any) -> Union[str, int, float, None]:
     return ""
 
 
-def modify_for_sql_file(data: Dict[str, Any]) -> Dict[str, Any]:
+def modify_for_sql_file(data: JsonDict) -> JsonDict:
     for key in data.keys():
         if isinstance(data[key], str):
             data[key] = "'" + data[key].replace("'", "''") + "'"
@@ -726,9 +853,10 @@ def modify_for_sql_file(data: Dict[str, Any]) -> Dict[str, Any]:
     return data
 
 
-def sql_dict_insert(data: Dict[str, Any], table: str, output_file: Dict) -> None:
+def sql_dict_insert(data: JsonDict, table: str, output_file: Dict) -> None:
     """
     Insert a dictionary into a sqlite table
+
     :param data: Dict to insert
     :param table: Table to insert to
     :param output_file: Output info dictionary
@@ -757,16 +885,10 @@ def sql_dict_insert(data: Dict[str, Any], table: str, output_file: Dict) -> None
         datastr = str(data)
         LOGGER.warning(f"Failed to insert row in '{table}' with values: {datastr}")
 
-if __name__ == '__main__':
-    import sys
-    import pathlib
 
-    if len(sys.argv)-1 != 2:
-        print( "Usage: {:s} {:s} {:s}".format(sys.argv[0], sys.argv[1],
-            sys.argv[2]) )
-        sys.exit(1)
-
-    infile  = pathlib.Path(sys.argv[1]).expanduser() 
-    outfile = {"path": pathlib.Path(sys.argv[2]).expanduser().absolute(), "handle": None} 
-
-    execute(infile, outfile)
+def commit_changes_and_close_db(output_file: Dict) -> None:
+    if output_file["path"].suffix == ".sql":
+        output_file["handle"].write("COMMIT;")
+    else:
+        output_file["handle"].commit()
+    output_file["handle"].close()

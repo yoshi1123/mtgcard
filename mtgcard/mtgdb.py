@@ -32,6 +32,7 @@ from pprint import pprint
 
 
 # regex
+r_facenamesep = re.compile(r" // ")
 r_namesep = re.compile(r",(?=[^ ])")
 r_unbraced_char = re.compile(r"(?<!{)(\d+|[WUBRGSCXwubrgscx])(?!})")
 
@@ -118,6 +119,25 @@ def csv_set_contains(a, b):
     else:
         setb = set(b.split(","))
     return seta.issuperset(setb)
+
+
+def facename_element(l, i):
+    """Return element `i` in `l`.
+
+    :param int i: index
+    :param str l: ' // ' separated name string
+
+    Example:
+
+        >>> facename_element(0, 'Rimrock Knight // Boulder Rush')
+        # 'Rimrock Knight'
+
+    """
+    e = r_facenamesep.split(l)
+    if e and i <= len(e) - 1:
+        return e[i]
+    else:
+        return None
 
 
 def manacost_contains(a, b):
@@ -290,6 +310,7 @@ class Interface(MTGDatabase):
         conn.create_function("csv_element", 2, csv_element)
         conn.create_function("csv_len", 1, csv_len)
         conn.create_function("csv_set_contains", 2, csv_set_contains)
+        conn.create_function("facename_element", 2, facename_element)
         conn.create_function("manacost_to_cmc", 1, manacost_to_cmc)
         conn.create_function("manacost_contains", 2, manacost_contains)
         conn.create_collation("main_sets_first", collate_exp_core_first)
@@ -375,11 +396,16 @@ class Interface(MTGDatabase):
         if setcode is not None:
             self.cursor.execute(
                 """
-                SELECT DISTINCT prices.price --, prices.date
+                SELECT DISTINCT
+                prices.price, --, prices.date
+                CASE WHEN cards.faceName IS NULL
+                THEN cards.name
+                ELSE cards.faceName
+                END AS v_name
                 FROM cards
                     LEFT JOIN prices ON cards.uuid = prices.uuid
                         AND prices.type = 'paper'
-                WHERE lower(name) = lower(?) and lower(setCode) = lower(?)
+                WHERE lower(v_name) = lower(?) AND lower(setCode) = lower(?)
                 ORDER BY prices.price
                 LIMIT 1
                 """,
@@ -396,12 +422,16 @@ class Interface(MTGDatabase):
 
                 self.cursor.execute(
                     """
-                    SELECT DISTINCT setCode, min(prices.price) --, prices.date
+                    SELECT DISTINCT setCode, min(prices.price), --, prices.date
+                    CASE WHEN tokens.faceName IS NULL
+                    THEN tokens.name
+                    ELSE tokens.faceName
+                    END AS v_name
                     FROM tokens
                         LEFT JOIN sets ON tokens.setCode = sets.code
                         LEFT JOIN prices ON tokens.uuid = prices.uuid
                             AND prices.type = 'paper'
-                    WHERE lower(tokens.name) = lower(?)
+                    WHERE lower(v_name) = lower(?)
                     GROUP BY setCode
                     ORDER BY
                         sets.type collate main_sets_first DESC,
@@ -415,12 +445,16 @@ class Interface(MTGDatabase):
 
                 self.cursor.execute(
                     """
-                    SELECT DISTINCT setCode, min(prices.price) --, prices.date
+                    SELECT DISTINCT setCode, min(prices.price), --, prices.date
+                    CASE WHEN cards.faceName IS NULL
+                    THEN cards.name
+                    ELSE cards.faceName
+                    END AS v_name
                     FROM cards
                         LEFT JOIN sets ON cards.setCode = sets.code
                         LEFT JOIN prices ON cards.uuid = prices.uuid
                             AND prices.type = 'paper'
-                    WHERE lower(cards.name) = lower(?)
+                    WHERE lower(v_name) = lower(?)
                     GROUP BY setCode
                     ORDER BY
                         sets.type collate main_sets_first DESC,
@@ -470,8 +504,14 @@ class Interface(MTGDatabase):
 
         sql = '''
             SELECT
+                CASE WHEN tokens.faceName IS NULL
+                THEN tokens.name
+                ELSE tokens.faceName
+                END AS v_name,
                 tokens.name, tokens.uuid, setCode, power, toughness, types,
-                tokens.type, text, layout, names, side, colors as colors_sp
+                tokens.type, text, layout,
+                replace(tokens.name, " // ", ",") as v_names, side,
+                colors as colors_sp
 
                 '''+(''',
                 prices.price,prices.date
@@ -490,7 +530,7 @@ class Interface(MTGDatabase):
 
             WHERE
 
-                lower(tokens.name) = lower(?)
+                lower(v_name) = lower(?)
 
                 '''+('''
                 AND lower(setCode) = lower(?)
@@ -539,7 +579,7 @@ class Interface(MTGDatabase):
         card = Card()
 
         card.names = (
-            r_namesep.split(result["names"]) if result["names"] else None
+            r_facenamesep.split(result["name"]) if result["name"] else None
         )
 
         # for flip, adventure, etc., get side a instead of side b
@@ -548,7 +588,7 @@ class Interface(MTGDatabase):
             if result["side"] == "b" and not single_side:
                 return self.get_card(card.names[0], result["setcode"])
 
-        card.name = result["name"]
+        card.name = result["v_name"]
         card.uuid = result["uuid"]
         card.setcode = result["setCode"]
         card.power = result["power"]
@@ -578,7 +618,7 @@ class Interface(MTGDatabase):
 
             if not single_side and card.names is not None:
                 card.otherfaces = (
-                    self.get_other_faces(card) if result["names"] else None
+                    self.get_other_faces(card) if result["v_names"] else None
                 )
 
             if rulings:
@@ -603,7 +643,7 @@ class Interface(MTGDatabase):
         """
         sortkey = {
             "cmc": "convertedManaCost",
-            "name": "name",
+            "name": "v_name",
             "price": "price",
             "setcode": "setCode",
         }
@@ -613,10 +653,14 @@ class Interface(MTGDatabase):
 
 
             SELECT
+                CASE WHEN cards.faceName IS NULL
+                THEN cards.name
+                ELSE cards.faceName
+                END AS v_name,
                 cards.name,cards.uuid,printings,setCode,convertedManaCost,
                 manaCost,power,toughness,loyalty,types,cards.type,rarity,
                 cards.text,layout,
-                names,side,
+                replace(cards.name, " // ", ",") as v_names,side,
                 max(setcode) OVER
                 (ORDER BY sets.type collate main_sets_first DESC,
                           releaseDate DESC
@@ -650,7 +694,7 @@ class Interface(MTGDatabase):
 
             WHERE
 
-                isPaper = true
+                csv_in(availability, 'paper')
 
                 AND (
                     -- exclude set 'Mystery Booster Playtest Cards (CMB1)'
@@ -668,14 +712,14 @@ class Interface(MTGDatabase):
                     (side IS NULL AND layout != 'split') OR
                     side = 'a' OR (layout = 'meld' AND side = 'b') OR
                     (side IS NULL AND layout = 'split'
-                        AND cards.name = csv_element(names,0))
+                        AND v_name = facename_element(cards.name,0))
                 )
 
                 '''+(' AND ('+query[0]+')' if len(query[0]) > 0 else '')+'''
 
 
         ) SELECT * FROM main_first
-        GROUP BY name
+        GROUP BY v_name
         '''+('ORDER BY {} {}'.format(sortkey[sort],
                                      ("DESC" if reverse else "ASC")))+'''
         '''+(f'LIMIT {limit}' if limit else '')+'''
@@ -693,7 +737,7 @@ class Interface(MTGDatabase):
         for result in results:
 
             # get card
-            cards[result["name"]] = self.card_from_result(
+            cards[result["v_name"]] = self.card_from_result(
                 result, verbose=False, rulings=False
             )
 
@@ -737,10 +781,14 @@ class Interface(MTGDatabase):
 
             self.cursor.execute("""
                 SELECT
+                    CASE WHEN cards.faceName IS NULL
+                    THEN cards.name
+                    ELSE cards.faceName
+                    END AS v_name,
                     cards.name,cards.uuid,printings,setCode,convertedManaCost,
                     manaCost,power,toughness,loyalty,types,cards.type,rarity,
                     cards.text,layout,
-                    names,side,
+                    replace(cards.name, " // ", ",") as v_names,side,
                     CASE WHEN (layout) IN ('split','aftermath') THEN
 
                             (WITH split(word, str) AS (
@@ -782,9 +830,9 @@ class Interface(MTGDatabase):
 
                 WHERE
 
-                    lower(cards.name) = lower(?)
+                    lower(v_name) = lower(?)
 
-                    AND isPaper = true
+                    AND csv_in(availability, 'paper')
 
                     """+("""
                     AND lower(setCode) = lower(?)

@@ -45,6 +45,10 @@ def update_database(verbose=False):
     json_file = os.path.join(data_dir, json_filename)
     sqlite_file = os.path.join(data_dir, "mtg.sqlite")
 
+    pzip_file = os.path.join(data_dir, "pdownload.zip")
+    pjson_filename = "AllPrices.json"
+    pjson_file = os.path.join(data_dir, pjson_filename)
+
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
 
@@ -52,9 +56,9 @@ def update_database(verbose=False):
         if verbose:
             print(*args)
 
-    #########################
-    #  get AllSetFiles.zip  #
-    #########################
+    ############################################
+    #  get AllPrintings.zip and AllPrices.zip  #
+    ############################################
 
     cert_filename = "Baltimore_CyberTrust_Root.crt"
     capath = ssl._ssl.get_default_verify_paths()[3]
@@ -66,10 +70,18 @@ def update_database(verbose=False):
         vprint("  CA certificate: system default CA path")
         cxt = None
 
-    url = "https://www.mtgjson.com/files/AllPrintings.json.zip"
+    # url = "https://www.mtgjson.com/files/AllPrintings.json.zip"
+    url = "https://www.mtgjson.com/api/v5/AllPrintings.json.zip"
     req = urllib.request.Request(url)
     req.add_header("Accept-Language", "en-US,en;q=0.5")
     req.add_header(
+        "User-Agent",
+        "Mozilla/5.0 (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11",
+    )
+    price_url = "https://www.mtgjson.com/api/v5/AllPrices.json.zip"
+    preq = urllib.request.Request(price_url)
+    preq.add_header("Accept-Language", "en-US,en;q=0.5")
+    preq.add_header(
         "User-Agent",
         "Mozilla/5.0 (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11",
     )
@@ -80,13 +92,24 @@ def update_database(verbose=False):
             shutil.copyfileobj(contents, f)
             vprint("  download complete")
 
-    ###########################
-    #  unzip AllSetFiles.zip  #
-    ###########################
+    with urllib.request.urlopen(preq, context=cxt) as contents:
+        with open(pzip_file, "wb") as f:
+            vprint("  downloading '{}' to '{}'...".format(price_url, pzip_file))
+            shutil.copyfileobj(contents, f)
+            vprint("  download complete")
+
+    ##############################################
+    #  unzip AllPrintings.zip and AllPrices.zip  #
+    ##############################################
 
     with zipfile.ZipFile(zip_file) as zf:
         vprint("  extracting '{}' to '{}'...".format(zip_file, data_dir))
         zf.extract(json_filename, path=data_dir)
+        vprint("  extraction complete")
+
+    with zipfile.ZipFile(pzip_file) as zf:
+        vprint("  extracting '{}' to '{}'...".format(pzip_file, data_dir))
+        zf.extract(pjson_filename, path=data_dir)
         vprint("  extraction complete")
 
     ########################
@@ -100,10 +123,11 @@ def update_database(verbose=False):
     infile = pathlib.Path(json_file)
     outfile = {"path": pathlib.Path(sqlite_file), "handle": None}
     try:
-        result = mtgcard.update.json2sql.execute(infile, outfile)
+        result = mtgcard.update.json2sql.execute(infile, outfile,
+                check_extras=True)
     except Exception:
         vprint("error creating database file")
-        sys.exit(result)
+        sys.exit(1)
     else:
         vprint("  database file complete")
 
@@ -122,3 +146,5 @@ def update_database(verbose=False):
 
     os.remove(zip_file)
     os.remove(json_file)
+    os.remove(pzip_file)
+    os.remove(pjson_file)

@@ -34,56 +34,56 @@ class TestParser(unittest.TestCase):
 
     def test_no_keywords_single_search(self):
         expected_result = (sql_where_card_or_otherids(
-                               "lower(cards.name) LIKE lower(?)",
-                               "lower(cards.name) LIKE lower(?)"),
+                               "lower(v_name) LIKE lower(?)",
+                               "lower(cards.faceName) LIKE lower(?)"),
                            ('%angel%','%angel%'))
         actual_result = parser.parse('angel')
         self.assertEqual(actual_result[0:2], expected_result[0:2])
 
     def test_name_case(self):
         expected_result = (sql_where_card_or_otherids(
-                               "lower(cards.name) LIKE lower(?)",
-                               "lower(cards.name) LIKE lower(?)"),
+                               "lower(v_name) LIKE lower(?)",
+                               "lower(cards.faceName) LIKE lower(?)"),
                            ('%angel%','%angel%'))
         actual_result = parser.parse('name:angel')
         self.assertEqual(actual_result[0:2], expected_result[0:2])
 
     def test_name_keyword(self):
         expected_result = (sql_where_card_or_otherids(
-                               "lower(cards.name) LIKE lower(?)",
-                               "lower(cards.name) LIKE lower(?)"),
+                               "lower(v_name) LIKE lower(?)",
+                               "lower(cards.faceName) LIKE lower(?)"),
                            ('%angel%','%angel%'))
         actual_result = parser.parse('name:angel')
         self.assertEqual(actual_result[0:2], expected_result[0:2])
 
     def test_name_keyword_exact(self):
         expected_result = (sql_where_card_or_otherids(
-                "lower(cards.name) = lower(?)",
-                "lower(cards.name) = lower(?)"),
+                "lower(v_name) = lower(?)",
+                "lower(cards.faceName) = lower(?)"),
             ('angel','angel'))
         actual_result = parser.parse('name:!angel')
         self.assertEqual(actual_result[0:2], expected_result[0:2])
 
     def test_name_keyword_double_quotes(self):
         expected_result = (sql_where_card_or_otherids(
-                               "lower(cards.name) LIKE lower(?)",
-                               "lower(cards.name) LIKE lower(?)"),
+                               "lower(v_name) LIKE lower(?)",
+                               "lower(cards.faceName) LIKE lower(?)"),
                            ('%angel%','%angel%'))
         actual_result = parser.parse('name:"angel"')
         self.assertEqual(actual_result[0:2], expected_result[0:2])
 
     def test_name_keyword_single_quotes(self):
         expected_result = (sql_where_card_or_otherids(
-                               "lower(cards.name) LIKE lower(?)",
-                               "lower(cards.name) LIKE lower(?)"),
+                               "lower(v_name) LIKE lower(?)",
+                               "lower(cards.faceName) LIKE lower(?)"),
                            ('%angel%','%angel%'))
         actual_result = parser.parse('name:\'angel\'')
         self.assertEqual(actual_result[0:2], expected_result[0:2])
 
     def test_name_keyword_with_spaces(self):
         expected_result = (sql_where_card_or_otherids(
-                               "lower(cards.name) LIKE lower(?)",
-                               "lower(cards.name) LIKE lower(?)"),
+                               "lower(v_name) LIKE lower(?)",
+                               "lower(cards.faceName) LIKE lower(?)"),
                            ('%serra angel%','%serra angel%'))
         actual_result = parser.parse('name:"serra angel"')
         self.assertEqual(actual_result[0:2], expected_result[0:2])
@@ -290,8 +290,8 @@ class TestParser(unittest.TestCase):
 
     def test_strings_empty_quotes(self):
         expected_result = (sql_where_card_or_otherids(
-                'lower(cards.name) = lower(?)'.strip(),
-                'lower(cards.name) = lower(?)'.strip()),
+                'lower(v_name) = lower(?)'.strip(),
+                'lower(cards.faceName) = lower(?)'.strip()),
             ('',''))
         actual_result = parser.parse("name:!''")
         self.assertEqual(actual_result[0:2], expected_result[0:2])
@@ -302,7 +302,7 @@ class TestParser(unittest.TestCase):
     # just matching the parameters tuple now, as the query is too volatile
 
     def test_not(self):
-        # expected_result = ('NOT lower(cards.name) LIKE lower(?)'.strip(),
+        # expected_result = ('NOT lower(v_name) LIKE lower(?)'.strip(),
         #                    ('%serra angel%',))
         expected_result = ('%serra angel%','%serra angel%')
         actual_result = parser.parse("-'serra angel'")
@@ -310,7 +310,7 @@ class TestParser(unittest.TestCase):
 
     def test_brackets_name_or_name(self):
         # expected_result = ('''
-        # ( lower(cards.name) LIKE lower(?) OR lower(cards.name) LIKE lower(?) )
+        # ( lower(v_name) LIKE lower(?) OR lower(v_name) LIKE lower(?) )
         # '''.strip(), ('%serra angel%', '%shivan dragon%'))
         expected_result = ('%serra angel%','%serra angel%',
                            '%shivan dragon%','%shivan dragon%')
@@ -326,22 +326,22 @@ class TestParser(unittest.TestCase):
     # combinations and options
 
     def test_no_keywords_or_search(self):
-        # expected_result = ("lower(cards.name) LIKE lower(?) OR lower(cards.name) LIKE lower(?)", ('%angel%','%bird%') )
+        # expected_result = ("lower(v_name) LIKE lower(?) OR lower(v_name) LIKE lower(?)", ('%angel%','%bird%') )
         expected_result = ('%angel%','%angel%','%bird%','%bird%')
         actual_result = parser.parse('angel or bird')
         self.assertEqual(expected_result, actual_result[1])
 
     def test_name_keyword_twice(self):
         # expected_result = (sql_where_card_or_otherids(
-        #         "lower(cards.name) LIKE lower(?) AND lower(cards.name) LIKE lower(?)",
-        #         "lower(cards.name) LIKE lower(?) AND lower(cards.name) LIKE lower(?)"),
+        #         "lower(v_name) LIKE lower(?) AND lower(v_name) LIKE lower(?)",
+        #         "lower(v_name) LIKE lower(?) AND lower(v_name) LIKE lower(?)"),
         #     ('%serra%','%serra%','%angel%','%angel%'))
         expected_result = ('%serra%','%serra%','%angel%','%angel%')
         actual_result = parser.parse('name:serra angel')
         self.assertEqual(expected_result, actual_result[1])
 
     def test_name_and_type_keyword(self):
-        # expected_result = ("lower(cards.name) LIKE lower(?) AND "+self.type_term,
+        # expected_result = ("lower(v_name) LIKE lower(?) AND "+self.type_term,
         #         ('%serra%', 'angel', 'angel'))
         expected_result = ('%serra%','%serra%','angel','angel','angel','angel','angel','angel')
         actual_result = parser.parse('name:serra type:angel')
@@ -349,7 +349,7 @@ class TestParser(unittest.TestCase):
 
     def test_brackets(self):
         # expected_result = ('''
-        # ( lower(cards.name) LIKE lower(?) OR lower(cards.name) LIKE lower(?) )
+        # ( lower(v_name) LIKE lower(?) OR lower(v_name) LIKE lower(?) )
         # '''.strip(), ('%serra angel%', '%shivan dragon%'))
         expected_result = ('%serra angel%','%serra angel%',
                            '%shivan dragon%','%shivan dragon%')
@@ -358,7 +358,7 @@ class TestParser(unittest.TestCase):
 
     def test_exact_name_and_set(self):
         # expected_result = (sql_where_card_or_otherids('''
-        # lower(cards.setCode) = lower(?) AND lower(cards.name) = lower(?)
+        # lower(cards.setCode) = lower(?) AND lower(v_name) = lower(?)
         # '''.strip(), ('m15', 'Serra Angel'))
         expected_result = ('m15','Serra Angel','Serra Angel')
         actual_result = parser.parse("set:m15 !'Serra Angel'")

@@ -16,8 +16,8 @@
 
 indexes = '''
 
-create index cards_idx on cards(isPaper,name,printings,setCode,convertedManaCost,manaCost,power,toughness,loyalty,types,type,rarity,text,layout);
-create index icard on cards(isPaper,name,setCode);
+create index cards_idx on cards(availability,name,printings,setCode,convertedManaCost,manaCost,power,toughness,loyalty,types,type,rarity,text,layout);
+create index icard on cards(availability,name,setCode);
 create index iprice on prices(uuid,price);
 create index ilegal on legalities(uuid,format,status);
 create index isets on sets(code, type desc, releaseDate desc);

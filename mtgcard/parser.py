@@ -213,7 +213,7 @@ def _parser():
     #  keywords  #
     ##############
 
-    reserved_str = {"name": "cards.name", "text": "cards.text"}
+    reserved_str = {"name": "v_name", "text": "cards.text"}
     reserved_chars = {
         "set": "cards.setCode",
         "legal": "legalities.format",
@@ -243,9 +243,10 @@ def _parser():
         """
         p.lexer.l_keywords.append("%{:s}%".format(p[1]))
         p.lexer.l_keywords.append("%{:s}%".format(p[1]))
-        sql_query = "lower({:s}) LIKE lower(?)".format("cards.name")
+        sql_query = "lower({:s}) LIKE lower(?)".format("v_name")
+        other_query = "lower({:s}) LIKE lower(?)".format("cards.faceName")
         p[0] = sql_where_card_or_otherids(
-            card_cond=sql_query, other_cond=sql_query
+            card_cond=sql_query, other_cond=other_query
         )
 
     def p_term_exact_name(p):
@@ -255,9 +256,10 @@ def _parser():
         """
         p.lexer.l_keywords.append(p[2])
         p.lexer.l_keywords.append(p[2])
-        sql_query = "lower({:s}) = lower(?)".format("cards.name")
+        sql_query = "lower({:s}) = lower(?)".format("v_name")
+        other_query = "lower({:s}) = lower(?)".format("cards.faceName")
         p[0] = sql_where_card_or_otherids(
-            card_cond=sql_query, other_cond=sql_query
+            card_cond=sql_query, other_cond=other_query
         )
 
     def p_term_eq_exact_name(p):
@@ -270,9 +272,10 @@ def _parser():
             raise ValueError("invalid search keyword '{}'".format(p[1]))
         p.lexer.l_keywords.append(p[4])
         p.lexer.l_keywords.append(p[4])
-        sql_query = "lower({:s}) = lower(?)".format("cards.name")
+        sql_query = "lower({:s}) = lower(?)".format("v_name")
+        other_query = "lower({:s}) = lower(?)".format("cards.faceName")
         p[0] = sql_where_card_or_otherids(
-            card_cond=sql_query, other_cond=sql_query
+            card_cond=sql_query, other_cond=other_query
         )
 
     # name and non-name condition terms
@@ -339,8 +342,10 @@ def _parser():
         p.lexer.l_keywords.append("%{:s}%".format(p[3]))
         p.lexer.l_keywords.append("%{:s}%".format(p[3]))
         sql_query = "lower({:s}) LIKE lower(?)".format(reserved_str[p[1]])
+        other_str = reserved_str[p[1]].replace("v_name", "cards.faceName")
+        other_query = "lower({:s}) LIKE lower(?)".format(other_str)
         p[0] = sql_where_card_or_otherids(
-            card_cond=sql_query, other_cond=sql_query
+            card_cond=sql_query, other_cond=other_query
         )
 
     def chars_term(p):
@@ -649,7 +654,7 @@ def sql_where_card_or_otherids(card_cond, other_cond=None, other_layouts=None):
                             (layout = 'meld' AND side != 'a' AND side != 'b')
                             OR
                             (side IS NULL AND layout = 'split'
-                                AND cards.name != csv_element(names,0))
+                                AND cards.faceName != facename_element(cards.name,0))
                         ) AND (
                             """+other_cond+"""
                         )
